@@ -1,33 +1,33 @@
-from . import Thread, time
-from threads.resources import error_resource
+from . import time, Process,Queue,Event
 import os
-import pygame
 
 audio_map = {"nospace": "nospace.mp3",
-             "nomine": "noore.mp3",
+             "noore": "noore.mp3",
              "empty": "empty.mp3"}
 err_kinds = list(audio_map.keys())
 
 
-class AudioPlayer(Thread):
-    def __init__(self, root):
+class AudioPlayer(Process):
+    def __init__(self, root, error_resource: Queue):
         super().__init__()
         self.root = root
-        pygame.mixer.init()
+        self.error_resource = error_resource
 
         # signals
-        self.close = False
-        self.pause = False
+        self.close = Event()
+        self.pause = Event()
 
         # cache
         self.errors = []
 
     def run(self):
-        while not self.close:
-            if not self.pause:
+        import pygame
+        pygame.mixer.init()
+        while not self.close.is_set():
+            if not self.pause.is_set():
                 # read errors from error resource
-                if error_resource.check_available("r"):
-                    self.errors.extend(error_resource.get())
+                for _ in range(self.error_resource.qsize()):
+                    self.errors.append(self.error_resource.get())
 
                 # find main error
                 counts = []
@@ -46,6 +46,7 @@ class AudioPlayer(Thread):
             time.sleep(1)
 
     def play(self, file):
+        import pygame
         pygame.mixer.music.load(os.path.join(self.root, file))
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():

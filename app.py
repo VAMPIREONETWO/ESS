@@ -4,28 +4,26 @@ from threads import Monitor, Detector, Listener, AudioPlayer
 from threading import Thread
 
 
-class ESS(Thread):
+class ESS(object):
     """
     EVE support system
     """
-    def __init__(self, screen):
+
+    def __init__(self, window_name, window_size):
         super().__init__()
 
+        self.window_name = window_name
+        self.window_size = window_size
+
+        # listener process
         self.listener = Listener()
-        self.screen = screen
+        self.listener.start()
 
-        self.monitor = None
-        self.detector = None
-        self.audio_player = None
-
-    def initialise(self):
-        self.monitor = Monitor(self.screen)
-        self.detector = Detector("data/eve_mine.pth")
-        self.audio_player = AudioPlayer("data/audios")
+        self.monitor = Monitor(window_name, window_size)
+        self.detector = Detector("assets/models/eve_mining.pth")
+        self.audio_player = AudioPlayer("assets/audios")
 
     def run(self):
-        self.initialise()
-        self.listener.start()
         self.monitor.start()
         self.detector.start()
         self.audio_player.start()
@@ -58,6 +56,5 @@ class ESS(Thread):
 
 
 if __name__ == '__main__':
-    app = ESS({"top": 0, "left": 0, "width": 1980, "height": 1080})
-    app.start()
-    app.join()
+    app = ESS('雷电模拟器-1', (1600, 900))
+    app.run()

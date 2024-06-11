@@ -1,15 +1,14 @@
-from . import Thread, time
+from . import time, Process, Queue, Event
 import numpy as np
-from mss import mss
 from PIL import Image
-from threads.resources import image_resource
 import win32gui
 import win32ui
 import win32con
+import matplotlib.pyplot as plt
 
 
-class Monitor(Thread):
-    def __init__(self, window_name, window_size):
+class Monitor(Process):
+    def __init__(self, window_name, window_size, image_resource: Queue):
         """
 
         :param screen: e.g. {"top": 0, "left": 0, "width": 1980, "height": 1080}
@@ -21,13 +20,11 @@ class Monitor(Thread):
         self.window_dc = None
         self.window_name = window_name
         self.window_size = window_size
+        self.image_resource = image_resource
 
         # signals
-        self.close = False
-        self.pause = False
-
-        # cache
-        self.images = []
+        self.close = Event()
+        self.pause = Event()
 
     def run(self):
         # DC (device context)
@@ -41,24 +38,26 @@ class Monitor(Thread):
         self.bitmap.CreateCompatibleBitmap(self.mfc_dc, self.window_size[0], self.window_size[1])
         self.save_dc.SelectObject(self.bitmap)
 
-        while not self.close:
-            if not self.pause:
+        while not self.close.is_set():
+            if not self.pause.is_set():
                 # capture window content
                 img = self.capture_window()
 
-                # cache images
-                self.images.append(img)
-
                 # write to shared resources
-                if image_resource.check_available("w"):
-                    image_resource.add(self.images)
-                    self.images.clear()
+                if not self.image_resource.full():
+                    self.image_resource.put_nowait(img)
             else:
-                if len(self.images) > 0:
-                    self.images.clear()
-                image_resource.clear()
+                if not self.image_resource.empty():
+                    for _ in range(self.image_resource.qsize()):
+                        self.image_resource.get_nowait()
 
-            time.sleep(0.02)
+            time.sleep(2)
+
+        # release DC
+        win32gui.DeleteObject(self.bitmap.GetHandle())
+        self.save_dc.DeleteDC()
+        self.mfc_dc.DeleteDC()
+        win32gui.ReleaseDC(window, self.window_dc)
 
     def capture_window(self) -> np.ndarray:
         # copy window content to bitmap
